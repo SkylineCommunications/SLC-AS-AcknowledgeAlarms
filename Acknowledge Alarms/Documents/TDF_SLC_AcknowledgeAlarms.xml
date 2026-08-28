@@ -1,0 +1,238 @@
+﻿<DMSScript options="272" xmlns="http://www.skyline.be/automation">
+  <Name>TDF_SLC_AcknowledgeAlarms</Name>
+  <Description>
+  </Description>
+  <Type>Automation</Type>
+  <Author>PRODTDF\Bergaire</Author>
+  <CheckSets>FALSE</CheckSets>
+  <Folder>
+  </Folder>
+  <Interactivity>Auto</Interactivity>
+  <Protocols>
+  </Protocols>
+  <Memory>
+  </Memory>
+  <Parameters>
+    <ScriptParameter id="1" type="string" values="">
+      <Description>alarms</Description>
+    </ScriptParameter>
+  </Parameters>
+  <Script>
+    <Exe id="2" type="csharp">
+      <Value><![CDATA[/*
+****************************************************************************
+*  Copyright (c) 2024,  Skyline Communications NV  All Rights Reserved.    *
+****************************************************************************
+
+By using this script, you expressly agree with the usage terms and
+conditions set out below.
+This script and all related materials are protected by copyrights and
+other intellectual property rights that exclusively belong
+to Skyline Communications.
+
+A user license granted for this script is strictly for personal use only.
+This script may not be used in any way by anyone without the prior
+written consent of Skyline Communications. Any sublicensing of this
+script is forbidden.
+
+Any modifications to this script by the user are only allowed for
+personal use and within the intended purpose of the script,
+and will remain the sole responsibility of the user.
+Skyline Communications will not be responsible for any damages or
+malfunctions whatsoever of the script resulting from a modification
+or adaptation by the user.
+
+The content of this script is confidential information.
+The user hereby agrees to keep this confidential information strictly
+secret and confidential and not to disclose or reveal it, in whole
+or in part, directly or indirectly to any person, entity, organization
+or administration without the prior written consent of
+Skyline Communications.
+
+Any inquiries can be addressed to:
+
+	Skyline Communications NV
+	Ambachtenstraat 33
+	B-8870 Izegem
+	Belgium
+	Tel.	: +32 51 31 35 69
+	Fax.	: +32 51 31 01 29
+	E-mail	: info@skyline.be
+	Web		: www.skyline.be
+	Contact	: Ben Vandenberghe
+
+****************************************************************************
+Revision History:
+
+DATE		VERSION		AUTHOR			COMMENTS
+2025.04.07	1.0.0		KDB			    Initial version
+
+Note: This is the original script developed by TDF and is kept here for reference.
+
+****************************************************************************
+*/
+
+using Skyline.DataMiner.Automation;
+using Skyline.DataMiner.Net;
+using Skyline.DataMiner.Net.Messages;
+using System;
+using System.Collections.Generic;
+using System.Linq;
+
+
+/// <summary>
+/// DataMiner Script Class.
+/// </summary>
+public class Script
+{
+    /// <summary>
+    /// The Script entry point.
+    /// </summary>
+    /// <param name="engine">Link with SLAutomation process.</param>
+    public void Run(Engine engine)
+    {
+        // Set required engine flags
+        engine.SetFlag(RunTimeFlags.NoKeyCaching);
+        engine.SetFlag(RunTimeFlags.AllowUndef);
+
+        try
+        {
+            // Parse the alarm parameters
+            ScriptParam alarms = engine.GetScriptParam("alarms");
+            string alarmsParameters = alarms.Value;
+            engine.Log($"Processing alarm parameters: {alarmsParameters}");
+
+            // Split and validate parameters
+            string[] parameters = alarmsParameters.Split(new[] { "&&" }, StringSplitOptions.None);
+            if (parameters.Length < 4)
+            {
+                throw new ArgumentException("Insufficient alarm parameters provided. Expected format: dataminerId&&elementId&&alarmId&&rootId");
+            }
+            int numberOfAlarms = parameters[0].Count(c => c == '+');
+            
+            List<Alarm> alarmsToAcknowledge = new List<Alarm>();
+            if (numberOfAlarms > 0)
+            {
+                engine.Log($"Multiple alarms detected {numberOfAlarms+1}");
+                // Split the strings first
+                string[] dataminerStrArr = parameters[0].Split('+');
+                string[] elementStrArr = parameters[1].Split('+');
+                string[] alarmStrArr = parameters[2].Split('+');
+                string[] rootStrArr = parameters[3].Split('+');
+
+                // Convert to int arrays
+                int[] dataminerIdArr = dataminerStrArr.Select(int.Parse).ToArray();
+                int[] elementIdArr = elementStrArr.Select(int.Parse).ToArray();
+                int[] alarmIdArr = alarmStrArr.Select(int.Parse).ToArray();
+                int[] rootIdArr = rootStrArr.Select(int.Parse).ToArray();
+
+                for(int i=0; i < dataminerIdArr.Length; i++)
+                {
+                    // Validate array lengths
+                    if (dataminerIdArr.Length != elementIdArr.Length ||
+                        elementIdArr.Length != alarmIdArr.Length ||
+                        alarmIdArr.Length != rootIdArr.Length)
+                    {
+                        throw new ArgumentException("All alarm parameters must have the same number of elements.");
+                    }
+                    // Create and add alarm to the list
+                    engine.Log($"Adding alarm: {dataminerIdArr[i]}/{elementIdArr[i]}/{alarmIdArr[i]} - RootId: {rootIdArr[i]}");
+                    alarmsToAcknowledge.Add(new Alarm(dataminerIdArr[i], elementIdArr[i], alarmIdArr[i], rootIdArr[i]));
+                }
+            }
+            else
+            {
+                // Parse alarm identifiers
+                int dataminerId = Convert.ToInt32(parameters[0]);
+                int elementId = Convert.ToInt32(parameters[1]);
+                int alarmId = Convert.ToInt32(parameters[2]);
+                int rootId = Convert.ToInt32(parameters[3]);
+                Alarm alarm = new Alarm(dataminerId, elementId, alarmId, rootId);
+                alarmsToAcknowledge.Add(alarm);
+            }
+
+            foreach (Alarm alarm in alarmsToAcknowledge)
+            {
+                AcknowledgeAlarms(engine, alarm);
+            }
+
+            engine.Log("Alarm acknowledgment completed successfully");
+        }
+        catch (FormatException ex)
+        {
+            engine.Log($"Parameter parsing error: {ex.Message}");
+            engine.ExitFail($"Invalid parameter format: {ex.Message}");
+        }
+        catch (Exception ex)
+        {
+            engine.Log($"Alarm acknowledgment failed: {ex.Message}");
+            engine.ExitFail(ex.ToString());
+        }
+    }
+    private void AcknowledgeAlarms(Engine engine, Alarm alarmToAcknowledge)
+    {
+        // Create AlarmTreeID
+        var treeId = new AlarmTreeID(alarmToAcknowledge.DataminerId, alarmToAcknowledge.ElementId, alarmToAcknowledge.AlarmId);
+        engine.Log($"Acknowledging alarm: {alarmToAcknowledge.DataminerId}/{alarmToAcknowledge.ElementId}/{alarmToAcknowledge.AlarmId} - TreeId: {treeId}");
+
+        // Request alarm details
+        var getAlarmDetails = new GetAlarmDetailsMessage(new[] { treeId });
+        var alarmResponse = Engine.SLNet.SendSingleResponseMessage(getAlarmDetails) as AlarmEventMessage;
+
+        // Validate response
+        if (alarmResponse == null)
+        {
+            throw new InvalidOperationException($"Failed to retrieve alarm details for TreeId: {treeId}");
+        }
+
+        // Log alarm info
+        engine.Log(
+            $"Alarm details: ID={alarmResponse.AlarmID}, Source={alarmResponse.Source}, " +
+            $"Description={alarmResponse.Description}, Type={alarmResponse.Type}, " +
+            $"Value={alarmResponse.Value}, CorrelationCount={alarmResponse.CorrelationBaseAlarmReferences?.Length ?? 0}");
+
+        // Acknowledge correlated alarms if applicable
+        if (alarmResponse.Source?.Equals("Correlation Engine", StringComparison.OrdinalIgnoreCase) == true &&
+            alarmResponse.CorrelationBaseAlarmReferences != null)
+        {
+            engine.Log("Processing correlated alarms...");
+
+            foreach (var correlatedAlarm in alarmResponse.CorrelationBaseAlarmReferences)
+            {
+                string ackMessage = $"Acknowledged by {treeId}";
+                engine.Log($"Acknowledging base alarm: {correlatedAlarm}");
+                engine.AcknowledgeAlarm(correlatedAlarm, ackMessage);
+            }
+        }
+
+        // Acknowledge the main alarm
+        engine.AcknowledgeAlarm(treeId, "Acknowledged via script");
+    }
+
+    public class Alarm
+    {
+        public int DataminerId { get; set; }
+        public int ElementId { get; set; }
+        public int AlarmId { get; set; }
+        public int RootId { get; set; }
+
+        public Alarm()
+        {
+
+        }
+
+        public Alarm(int dataminerId, int elementId, int alarmId, int rootId)
+        {
+            DataminerId = dataminerId;
+            ElementId = elementId;
+            AlarmId = alarmId;
+            RootId = rootId;
+        }
+    }
+}]]></Value>
+      <Param type="ref">c:\skyline dataminer\files\Newtonsoft.Json.dll</Param>
+      <Message>
+      </Message>
+    </Exe>
+  </Script>
+</DMSScript>
