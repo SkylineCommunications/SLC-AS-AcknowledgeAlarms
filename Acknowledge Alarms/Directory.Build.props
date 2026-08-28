@@ -1,14 +1,14 @@
 <Project>
 	<PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
 		<DebugType>full</DebugType>
-		<CodeAnalysisRuleSet>..\Internal\Code Analysis\qaction-debug.ruleset</CodeAnalysisRuleSet>
+		<CodeAnalysisRuleSet>Internal\Code Analysis\qaction-debug.ruleset</CodeAnalysisRuleSet>
 	</PropertyGroup>
 	<PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
 		<DebugType>pdbonly</DebugType>
-		<CodeAnalysisRuleSet>..\Internal\Code Analysis\qaction-release.ruleset</CodeAnalysisRuleSet>
+		<CodeAnalysisRuleSet>Internal\Code Analysis\qaction-release.ruleset</CodeAnalysisRuleSet>
 	</PropertyGroup>
 	<ItemGroup>
-		<AdditionalFiles Include="..\Internal\Code Analysis\stylecop.json">
+		<AdditionalFiles Include="Internal\Code Analysis\stylecop.json">
 			<Link>Properties\stylecop.json</Link>
 		</AdditionalFiles>
 		<Content Include="..\.editorconfig">
